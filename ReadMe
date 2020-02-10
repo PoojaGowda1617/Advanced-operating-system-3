@@ -1,0 +1,32 @@
+Advanced-OS-6378-Project3
+=========================
+
+Project to Implement the Jajodia-Mutchler voting algorithm.
+
+
+Steps to Run the program:
+==========================
+
+The server files are to be copied to a total of 8 different machines (8 Servers )
+
+
+The command to run the server:
+==============================
+Before running the server, 8 folders, one corresponding to each server must be created in the file system. All these 8 folders must be in the same location.Files folder must be placed in each server folder and it should be same across all the servers.
+
+gcc -pthread server.c
+./a.out <server_id> <port_no>   (server_id denotes the server number and it must be a number from 0 to 7)
+
+
+
+
+Important points to remember
+============================
+
+Each excution of servers will write an entry(ip address and the port number) into the config files(placed in config folder at root).
+servers will write in serverconfig.txt
+
+Prior to next execution, the contents of serverconfig.txt files must be manually deleted.
+
+
+
