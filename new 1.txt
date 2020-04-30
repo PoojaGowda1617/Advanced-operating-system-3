@@ -1,0 +1,187 @@
+#define morse(character, enc) character enc
+#define in_feed PUSH2
+#define output GREEN_LED
+#define buffer_size 30
+#define BUF_SZ 8
+
+char m_table[36][7] = {morse("0", "-----"), morse("1", ".----"), morse("2", "..---"), morse("3", "...--"),morse("4", "....-"),
+					   morse("5", "....."),morse("6", "-...."),morse("7", "--..."),morse("8", "---.."),morse("9", "----."),
+					   morse("a", ".-"), morse("b", "-..."),morse("c", "-.-."),morse("d", "-.."),morse("e", "."),morse("f", "..-."),
+					   morse("g", "--."),morse("h", "...."),morse("i", ".."),morse("j", ".---"), morse("k", "-.-"),morse("l", ".-.."),
+					   morse("m", "--"),morse("n", "-."),morse("o", "---"),morse("p", ".--."),morse("q", "--.-"),morse("r", ".-."),
+					   morse("s", "..."),morse("t", "-"),morse("u", "..-"),morse("v", "...-"),morse("w", ".--"),
+					   morse("x", "-..-"),morse("y", "-.--"),morse("z", "--..")
+					};
+                                    
+
+
+unsigned long centroid[2] = {100,300};
+char buf_recv[BUF_SZ];
+unsigned long last_ms;
+boolean last_state = false;
+unsigned long buf_int[buffer_size];
+unsigned int buf_int_i = 0;
+unsigned long recv_i = 0;
+
+void morse_out(const char *enc) {
+  boolean inverted = centroid[1] < centroid[0];
+  unsigned long dit = inverted ? centroid[1] : centroid[0];
+  unsigned long dah = inverted ? centroid[0] : centroid[1];
+
+  while (enc != NULL) {
+    switch (*(enc++)) {
+      case '.':
+        digitalWrite(output, HIGH);
+        delay(dit);
+        digitalWrite(output, LOW);
+        delay(dit);
+        break;
+
+      case '-':
+        digitalWrite(output, HIGH);
+        delay(dah);
+        digitalWrite(output, LOW);
+        delay(dit);
+        break;
+
+      default:
+        delay(dah);
+        return;
+    }
+  }
+}
+
+
+void morse_in(int k_state, unsigned long time_nw) {
+  unsigned long len;
+
+  if (k_state == last_state) {
+    return;
+  }
+
+  if (time_nw - last_ms < 25) {
+    return;						//this is to ignore the debouncing
+  }
+
+  if (!k_state && recv_i < BUF_SZ) {
+    len = time_nw - last_ms;
+    char character = interval_sep(len);
+    buf_recv[recv_i++] = character;
+    update_centroids(len);
+  }
+
+  last_state = k_state;
+  last_ms = time_nw;
+}
+
+char dec_character(const char *enc) {
+  unsigned int i=0;
+  unsigned int k=sizeof(m_table);
+  while(i<k)
+  {
+	if(strncmp(m_table[i] + 1, enc, BUF_SZ) == 0)
+		return *m_table[i];
+  }
+  return '\0';
+}
+ 
+const char *enc_character(char character) {
+  unsigned int i=0;
+  unsigned int j=sizeof(m_table);
+  if (character >= 65 && character <= 90) {
+    character += 32;
+  }
+  
+  while(i<j)
+  {
+	if(character!= *(m_table[i]))
+		return NULL;
+	return 1 + m_table[i];
+  }
+}
+
+static unsigned long distance(unsigned long a, unsigned long b) {
+  return abs(a - b);
+}
+
+int get_centroid(unsigned long len) {
+  if (distance(len, centroid[1]) < distance(len, centroid[0])) {
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
+char interval_sep(unsigned long len) {
+  if ((centroid[1] < centroid[0]) != (get_centroid(len) == 0)) {
+    return '.';
+  } else {
+    return '-';
+  }
+}
+
+void update_centroids(unsigned long len) {
+  unsigned long centroid_sums[2] = { 0, 0 };
+  int centroid_matches[2] = { 0, 0 };
+  int i, j, k;
+
+  buf_int[buf_int_i] = len;
+
+  centroid[0] = 100;
+  centroid[1] = 300;
+  for (i = 0; i < 100; i++) {
+    for (j = 0; j < buffer_size; j++) {
+      k = get_centroid(buf_int[j]);
+      centroid_sums[k] += buf_int[j];
+      centroid_matches[k]++;
+    }
+    for (k = 0; k < 2; k++) {
+      centroid[k] = centroid_sums[k] / centroid_matches[k];
+    }
+  }
+
+  buf_int_i = (buf_int_i + 1) % buffer_size;
+}
+
+
+void setup() {
+  long k=0;
+
+  buf_recv[0] = '\0';
+
+  pinMode(output, OUTPUT);
+  pinMode(in_feed, INPUT_PULLUP);
+  digitalWrite(output, LOW);
+  Serial.begin(9600);
+  
+  while(k<buffer_size)
+  {
+  buf_int[k] = centroid[k % 2];
+  k=k+1;
+  }
+}
+
+void loop() {
+  char character;
+  long long time_nw = millis();
+  boolean k_state = !digitalRead(in_feed);
+
+
+  morse_in(k_state, time_nw);
+  if (!last_state && recv_i != 0 && interval_sep(time_nw - last_ms) == '-') 
+  {
+    buf_recv[recv_i] = '\0';
+    character = dec_character(buf_recv);
+    if (character) {
+      Serial.write(character);
+    }
+    recv_i = 0;
+  }
+
+  character = Serial.read();
+  if (character >= 0) {
+    morse_out(enc_character(character));
+  }
+
+  delay(5);
+}
